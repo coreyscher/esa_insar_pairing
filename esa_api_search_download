@@ -1,0 +1,79 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Created on Sun Nov  5 13:31:14 2017
+
+@author: cscher
+"""
+
+import urllib.request, urllib.error
+import xml.etree.ElementTree as etree
+import os
+from socket import error as SocketError
+import errno
+
+#Override default timeout (units in seconds)
+import socket 
+socket.setdefaulttimeout(10000)
+
+# Authenticate at scihub webpage
+url =  'https://scihub.copernicus.eu/dhus/'
+username = ''
+password = ''
+password_mgr = urllib.request.HTTPPasswordMgrWithDefaultRealm()
+
+password_mgr.add_password(None, url, username, password)
+handler = urllib.request.HTTPBasicAuthHandler(password_mgr)
+opener = urllib.request.build_opener(handler)
+urllib.request.install_opener(opener)
+
+# The request query
+urlrequest ="<esa_api_search_url>" 
+
+# Read the response into page and write it to an xml-file
+page = urllib.request.urlopen(urlrequest).read()
+textfile = open('test.xml', 'wb')
+textfile.write(page)
+textfile.close()
+
+#Parsing the xml-file, the entry tag contains the results
+
+tree = etree.parse('test.xml')
+entries = tree.findall('{http://www.w3.org/2005/Atom}entry')
+print("Number of Scenes Found: ", len(entries))
+
+for entry in range(len(entries)):
+    #The uuid element allows to create the path to the file
+    uuid_element = entries[entry].find('{http://www.w3.org/2005/Atom}id')
+    sentinel_link = "https://scihub.copernicus.eu/dhus/odata/v1/Products('" + uuid_element.text + "')/$value"
+    
+    #the title element contains the corresponding file name
+    title_element = entries[entry].find('{http://www.w3.org/2005/Atom}title')
+    
+    #Destinationpath with filename where download to be stored
+    destinationpath =  title_element.text + '.zip'  
+    print
+    print("Scene ", entry + 1 , "of ", len(entries))
+    
+    #Check if file already was downloaded
+    print(sentinel_link)
+    if os.path.exists(destinationpath):
+        print(title_element.text, ' already downloaded')
+        
+        continue
+    
+    #Download file and read
+    print("Downloading ", title_element.text)
+
+    try:
+        urllib.request.urlretrieve(sentinel_link, destinationpath)
+    except SocketError as e:
+        if e.errno != errno.ECONNRESET:
+            raise # Not error we are looking for
+        pass # Handle error here.
+    except urllib.error.ContentTooShortError:
+        pass
+
+
+print("Done downloading")
+
